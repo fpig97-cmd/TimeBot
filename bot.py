@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-TOKEN = "여기에_봇_토큰"
+TOKEN = "MTQ3MzMyMjgyOTMyNzEwNjA3OQ.Ghd9Mo.AVDVCu9rB5BLHc7vqYp7jMkwJ2oudClbAyh6m4"
 
 # ===== DB 설정 =====
 conn = sqlite3.connect("reservations.db")
