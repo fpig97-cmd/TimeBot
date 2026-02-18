@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-TOKEN = "MTQ3MzMyMjgyOTMyNzEwNjA3OQ.G7J7ab.CdhqC3jFL-DTyLkLiGE-L5AZhRqDAmjLuznIOA"
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 KST = ZoneInfo("Asia/Seoul")
 
