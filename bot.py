@@ -36,7 +36,15 @@ class Bot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        await self.tree.sync()
+        # 봇이 들어가 있는 모든 서버에 명령어 동기화
+        for guild in self.guilds:
+            try:
+                await self.tree.sync(guild=guild)
+                print(f"[{guild.name}]({guild.id}) 에 슬래시 명령어 동기화됨")
+            except Exception as e:
+                print(f"[{guild.name}]({guild.id}) 동기화 실패: {repr(e)}")
+
+        # 예약 체크 루프 시작
         self.loop.create_task(self.check_reservations())
 
     async def check_reservations(self):
@@ -49,12 +57,19 @@ class Bot(discord.Client):
 
             for row in rows:
                 rid, guild_id, channel_id, user_id, send_time, content = row
-                send_dt = datetime.strptime(send_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
+                send_dt = (
+                    datetime.strptime(send_time, "%Y-%m-%d %H:%M:%S")
+                    .replace(tzinfo=KST)
+                )
 
                 if now >= send_dt:
                     channel = self.get_channel(channel_id)
                     if channel:
-                        await channel.send(f"📢 예약 메시지\n{content}")
+                        ts = int(send_dt.timestamp())
+                        await channel.send(
+                            f"{content}\n\n"
+                            f"예약 시간: <t:{ts}:f> (<t:{ts}:R>)"
+                        )
 
                     cursor.execute("DELETE FROM reservations WHERE id = ?", (rid,))
                     conn.commit()
@@ -82,7 +97,7 @@ def parse_korean_datetime(text: str):
         if unit == "초":
             return now + timedelta(seconds=num)
 
-    # 2️⃣ 오늘 / 내일
+    # 2️⃣ 오늘 / 내일 (예: 오늘 오후 3시 10분 00초)
     pattern2 = r"(오늘|내일)\s*(오전|오후)\s*(\d+)시\s*(\d+)분\s*(\d+)초"
     match2 = re.match(pattern2, text)
     if match2:
@@ -100,10 +115,14 @@ def parse_korean_datetime(text: str):
         if dayword == "내일":
             base = now + timedelta(days=1)
 
-        return datetime(base.year, base.month, base.day, hour, minute, second, tzinfo=KST)
+        return datetime(
+            base.year, base.month, base.day, hour, minute, second, tzinfo=KST
+        )
 
-    # 3️⃣ 전체 날짜
-    pattern3 = r"(\d+)년\s*(\d+)월\s*(\d+)일\s*(오전|오후)\s*(\d+)시\s*(\d+)분\s*(\d+)초"
+    # 3️⃣ 전체 날짜 (예: 2026년 2월 20일 오후 6시 30분 00초)
+    pattern3 = (
+        r"(\d+)년\s*(\d+)월\s*(\d+)일\s*(오전|오후)\s*(\d+)시\s*(\d+)분\s*(\d+)초"
+    )
     match3 = re.match(pattern3, text)
     if match3:
         year, month, day, ampm, hour, minute, second = match3.groups()
@@ -130,27 +149,25 @@ def parse_korean_datetime(text: str):
 @app_commands.describe(
     날짜="예: 2026년 2월 20일 오후 6시 30분 00초 / 오늘 오후 6시 30분 00초 / 3시간 뒤",
     내용="보낼 메시지",
-    채널="보낼 채널 (관리자만 다른 채널 가능)"
+    채널="보낼 채널 (관리자만 다른 채널 가능)",
 )
 async def 예약(
     interaction: discord.Interaction,
     날짜: str,
     내용: str,
-    채널: discord.TextChannel = None
+    채널: discord.TextChannel = None,
 ):
     send_dt = parse_korean_datetime(날짜)
 
     if not send_dt:
         await interaction.response.send_message(
-            "❌ 날짜 형식이 올바르지 않습니다.",
-            ephemeral=True
+            "❌ 날짜 형식이 올바르지 않습니다.", ephemeral=True
         )
         return
 
     if send_dt <= datetime.now(KST):
         await interaction.response.send_message(
-            "❌ 현재 시간 이후로 설정해주세요.",
-            ephemeral=True
+            "❌ 현재 시간 이후로 설정해주세요.", ephemeral=True
         )
         return
 
@@ -158,26 +175,29 @@ async def 예약(
 
     if 채널 and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
-            "❌ 다른 채널 지정은 관리자만 가능합니다.",
-            ephemeral=True
+            "❌ 다른 채널 지정은 관리자만 가능합니다.", ephemeral=True
         )
         return
 
     cursor.execute(
-        "INSERT INTO reservations (guild_id, channel_id, user_id, send_time, content) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO reservations (guild_id, channel_id, user_id, send_time, content) "
+        "VALUES (?, ?, ?, ?, ?)",
         (
             interaction.guild_id,
             target_channel.id,
             interaction.user.id,
             send_dt.strftime("%Y-%m-%d %H:%M:%S"),
-            내용
-        )
+            내용,
+        ),
     )
     conn.commit()
 
+    ts = int(send_dt.timestamp())
     await interaction.response.send_message(
-        f"✅ 예약 완료!\n채널: {target_channel.mention}\n시간: {send_dt.strftime('%Y-%m-%d %H:%M:%S')}",
-        ephemeral=True
+        "✅ 예약 완료!\n"
+        f"채널: {target_channel.mention}\n"
+        f"시간: {send_dt.strftime('%Y-%m-%d %H:%M:%S')} (<t:{ts}:R>)",
+        ephemeral=True,
     )
 
 
@@ -186,7 +206,7 @@ async def 예약(
 async def 예약목록(interaction: discord.Interaction):
     cursor.execute(
         "SELECT id, send_time, content FROM reservations WHERE user_id = ?",
-        (interaction.user.id,)
+        (interaction.user.id,),
     )
     rows = cursor.fetchall()
 
@@ -194,11 +214,20 @@ async def 예약목록(interaction: discord.Interaction):
         await interaction.response.send_message("📭 예약이 없습니다.", ephemeral=True)
         return
 
-    msg = "📋 예약 목록\n"
+    msg_lines = ["📋 예약 목록"]
     for r in rows:
-        msg += f"\nID: {r[0]}\n시간: {r[1]}\n내용: {r[2]}\n"
+        rid, send_time, content = r
+        send_dt = datetime.strptime(send_time, "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=KST
+        )
+        ts = int(send_dt.timestamp())
+        msg_lines.append(
+            f"\nID: {rid}\n"
+            f"시간: {send_time} (<t:{ts}:R>)\n"
+            f"내용: {content}"
+        )
 
-    await interaction.response.send_message(msg, ephemeral=True)
+    await interaction.response.send_message("\n".join(msg_lines), ephemeral=True)
 
 
 # ===== 예약 취소 =====
@@ -207,12 +236,14 @@ async def 예약목록(interaction: discord.Interaction):
 async def 예약취소(interaction: discord.Interaction, id: int):
     cursor.execute(
         "SELECT * FROM reservations WHERE id = ? AND user_id = ?",
-        (id, interaction.user.id)
+        (id, interaction.user.id),
     )
     row = cursor.fetchone()
 
     if not row:
-        await interaction.response.send_message("❌ 해당 예약을 찾을 수 없습니다.", ephemeral=True)
+        await interaction.response.send_message(
+            "❌ 해당 예약을 찾을 수 없습니다.", ephemeral=True
+        )
         return
 
     cursor.execute("DELETE FROM reservations WHERE id = ?", (id,))
