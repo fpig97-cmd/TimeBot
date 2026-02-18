@@ -1,4 +1,5 @@
 import discord
+import os
 from discord import app_commands
 import asyncio
 import sqlite3
