@@ -63,13 +63,13 @@ class Bot(discord.Client):
                 )
 
                 if now >= send_dt:
-                    channel = self.get_channel(channel_id)
-                    if channel:
-                        ts = int(send_dt.timestamp())
-                        await channel.send(
-                            f"{content}\n\n"
-                            f"예약 시간: <t:{ts}:f> (<t:{ts}:R>)"
-                        )
+    channel = self.get_channel(channel_id)
+    if channel:
+        ts = int(send_dt.timestamp())
+        await channel.send(
+            f"{content}\n\n"
+            f"예약 시간: <t:{ts}:f> (<t:{ts}:R>)"
+        )
 
                     cursor.execute("DELETE FROM reservations WHERE id = ?", (rid,))
                     conn.commit()
