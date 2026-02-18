@@ -57,19 +57,15 @@ class Bot(discord.Client):
 
             for row in rows:
                 rid, guild_id, channel_id, user_id, send_time, content = row
-                send_dt = (
-                    datetime.strptime(send_time, "%Y-%m-%d %H:%M:%S")
-                    .replace(tzinfo=KST)
-                )
+                send_dt = datetime.strptime(
+                    send_time, "%Y-%m-%d %H:%M:%S"
+                ).replace(tzinfo=KST)
 
                 if now >= send_dt:
-    channel = self.get_channel(channel_id)
-    if channel:
-        ts = int(send_dt.timestamp())
-        await channel.send(
-            f"{content}\n\n"
-            f"예약 시간: <t:{ts}:f> (<t:{ts}:R>)"
-        )
+                    channel = self.get_channel(channel_id)
+                    if channel:
+                        # 예약 발송 시에는 내용만 전송
+                        await channel.send(content)
 
                     cursor.execute("DELETE FROM reservations WHERE id = ?", (rid,))
                     conn.commit()
